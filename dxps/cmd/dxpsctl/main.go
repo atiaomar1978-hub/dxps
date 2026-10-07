@@ -16,11 +16,12 @@ var commands = map[string]func(args []string) error{
 	"redrive":    cmdRedrive,
 	"api":        cmdAPI,
 	"testreport": cmdTestReport,
+	"trace":      cmdTrace,
 }
 
 func main() {
 	if len(os.Args) < 2 || commands[os.Args[1]] == nil {
-		fmt.Fprintln(os.Stderr, "usage: dxpsctl secrets|certs|migrate|seed|topics|token|redrive|api|testreport [flags]")
+		fmt.Fprintln(os.Stderr, "usage: dxpsctl secrets|certs|migrate|seed|topics|token|redrive|api|testreport|trace [flags]")
 		os.Exit(2)
 	}
 	if err := commands[os.Args[1]](os.Args[2:]); err != nil {

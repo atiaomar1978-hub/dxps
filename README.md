@@ -63,7 +63,7 @@ flowchart LR
 | `eventhub` | Signed TMF688 webhook delivery | 9203 (stats) |
 | `netsim` | NE simulators: NRF, UDR, IMS, RESTCONF/USP, SM-DP+, OCS, NPDB, NEF/CAMARA, hub sink | 9101-9109, admin 9199 |
 | `dashboard` | Mosaic live dashboard | 8088 |
-| `dxpsctl` | Operations CLI: secrets, dev PKI, migrations, seeding, topics, tokens, DLQ re-drive, API calls, test report | - |
+| `dxpsctl` | Operations CLI: secrets, dev PKI, migrations, seeding, topics, tokens, DLQ re-drive, API calls, order trace, test report | - |
 
 Infrastructure: **PostgreSQL 18** (TLS 1.3, SCRAM) and **Apache Kafka 4** (KRaft, no ZooKeeper).
 
@@ -123,6 +123,8 @@ Full details, payloads and evidence: `DxPS_Test_Cases_and_Results.pdf`.
 | `dxps/internal/store/migrations/` | PostgreSQL schema (tenant composite keys, RLS, partitions) |
 | `dxps/scripts/` | Install / setup / run / test / security-scan scripts: `.ps1` for Windows, `.sh` for Ubuntu and macOS |
 | `dxps/INSTALL.md` | Step-by-step installation and running guide |
+| `dxps/docs/COMPONENTS.md` | How PostgreSQL, Kafka and each component are used, with real rows and messages |
+| `DxPS_Components_and_Data_Guide.*` | Components and data guide (Word / PDF) |
 | `DxPS_TO-BE_HLD_LLD.*` | TO-BE design, high- and low-level (Word / PDF) |
 | `DxPS_Test_Cases_and_Results.*` | Test cases and results (Word / PDF) |
 | `DxPS_Installation_and_Running_Guide.*` | Installation guide (Word / PDF) |
