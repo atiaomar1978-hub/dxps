@@ -81,22 +81,19 @@ add(("table", ["Software", "Windows", "Ubuntu", "macOS"], [
 ]))
 
 add(("h1", "3. Package contents"))
-add(("code", "text", """DxPS_Delivery_<date>/
-  README.txt                       start here
-  SHA256SUMS.txt                   checksums of every file in the package
-  dxps-source-<date>.zip           source for Windows (CRLF-safe)
-  dxps-source-<date>.tar.gz        source for Ubuntu/macOS (scripts keep their execute bit)
-  docs/
-    DxPS_TO-BE_HLD_LLD.docx/.pdf             design (HLD + LLD)
-    DxPS_Test_Cases_and_Results.docx/.pdf    test cases, results, security, payloads
-    DxPS_Installation_and_Running_Guide.docx/.pdf   this guide
-  evidence/                        tests.json, coverage, probes, govulncheck, gosec, payload traces
+add(("p", "The release (GitHub release v<version>, or the DxPS_Delivery_<date> folder) contains:"))
+add(("code", "text", """dxps-<version>-windows.zip        Windows bundle (source, scripts, manuals)
+dxps-<version>-ubuntu.tar.gz      Ubuntu / macOS bundle (same content; scripts keep their execute bit)
+dxps-<version>-evidence.zip       test evidence: tests.json, coverage, probes, govulncheck, gosec, payload traces
+SHA256SUMS.txt                    checksums of the files above
 
-dxps/ (inside the source archive)
-  cmd/        gateway orchestrator adapter eventhub netsim dashboard dxpsctl
-  internal/   24 packages (catalog, planner, saga, bus, store, ...) with their tests
-  scripts/    *.ps1 for Windows, *.sh for Ubuntu and macOS
-  INSTALL.md  this guide in Markdown"""))
+dxps/ (inside each bundle)
+  RELEASE.txt  start here: contents and quick start for the platform
+  cmd/         gateway orchestrator adapter eventhub netsim dashboard dxpsctl
+  internal/    24 packages (catalog, planner, saga, bus, store, ...) with their tests
+  scripts/     *.ps1 for Windows, *.sh for Ubuntu and macOS
+  docs/manuals/  HLD+LLD, Test Cases and Results, Components and Data Guide, this guide (docx + pdf)
+  INSTALL.md   this guide in Markdown"""))
 add(("p", "All scripts keep their state in one runtime directory, by default %USERPROFILE%\\dxps-runtime on Windows "
           "and ~/dxps-runtime on Ubuntu and macOS (override with DXPS_RUNTIME). The source tree is never modified."))
 add(("table", ["Script (Windows .ps1 / Ubuntu+macOS .sh)", "What it does", "When"], [
@@ -114,7 +111,7 @@ add(("table", ["Script (Windows .ps1 / Ubuntu+macOS .sh)", "What it does", "When
 # ---------------------------------------------------------------- Windows
 add(("h1", "4. Windows 10/11 - step by step"))
 add(("steps", [
-    ("Unpack the source", "Extract dxps-source-<date>.zip, for example to C:\\dxps. Open Windows PowerShell in that folder "
+    ("Unpack the source", "Extract dxps-<version>-windows.zip, for example to C:\\ (it creates C:\\dxps). Open Windows PowerShell in that folder "
      "(the folder that contains go.mod) and allow local scripts for this window only.", "powershell",
      "cd C:\\dxps\nSet-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass"),
     ("Install the prerequisites", "Installs Go and Java with winget if missing, and downloads PostgreSQL 18 binaries and "
@@ -138,7 +135,7 @@ add(("note", "Windows-specific: Kafka on Windows cannot rename open log segments
 add(("h1", "5. Ubuntu 22.04 / 24.04 - step by step"))
 add(("steps", [
     ("Unpack the source", "Use a normal user with sudo rights, not root: PostgreSQL refuses to run as root.", "bash",
-     "mkdir -p ~/dxps && tar -xzf dxps-source-<date>.tar.gz -C ~/dxps --strip-components=1\ncd ~/dxps"),
+     "mkdir -p ~/dxps && tar -xzf dxps-<version>-ubuntu.tar.gz -C ~/dxps --strip-components=1\ncd ~/dxps"),
     ("Install the prerequisites", "Adds the official PostgreSQL apt repository and installs postgresql-18 without creating "
      "the system cluster, installs OpenJDK 21, installs Go 1.26.6 into the runtime if the system Go is older, and "
      "downloads Kafka 4. Asks for your sudo password.", "bash", "bash scripts/install-deps-ubuntu.sh"),
@@ -156,7 +153,8 @@ add(("h1", "6. macOS 13+ - step by step"))
 add(("steps", [
     ("Install Homebrew and the command line tools", "Skip if you already have them.", "bash",
      "xcode-select --install\n/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""),
-    ("Unpack the source", "", "bash", "mkdir -p ~/dxps && tar -xzf dxps-source-<date>.tar.gz -C ~/dxps --strip-components=1\ncd ~/dxps"),
+    ("Unpack the source", "Use the Ubuntu bundle; it is the same for macOS.", "bash",
+     "mkdir -p ~/dxps && tar -xzf dxps-<version>-ubuntu.tar.gz -C ~/dxps --strip-components=1\ncd ~/dxps"),
     ("Install the prerequisites", "Installs go, postgresql@18 and openjdk@21 with Homebrew (no brew services are started) and "
      "downloads Kafka 4 into the runtime.", "bash", "bash scripts/install-deps-macos.sh"),
     ("Create the runtime", "", "bash", "bash scripts/infra-setup.sh"),
@@ -309,8 +307,8 @@ def to_docx():
     kpi_table(doc, [("steps to a running stack", "4", None), ("platforms", "3", None),
                     ("services + simulators", "6 + 9", None), ("dashboard", "127.0.0.1:8088", None)])
     table(doc, ["Item", "Value"], [
-        ["Document", "DXPS-INSTALL-GUIDE"], ["Version", "1.0"], ["Date", "06 October 2026"],
-        ["Applies to", "dxps source package of the same date; Go 1.26.6, PostgreSQL 18, Apache Kafka 4.3.1"],
+        ["Document", "DXPS-INSTALL-GUIDE"], ["Version", "1.1"], ["Date", "07 October 2026"],
+        ["Applies to", "DxPS release 1.0.0; Go 1.26.6, PostgreSQL 18, Apache Kafka 4.3.1"],
     ], widths=[1.6, 5.4])
     page_break(doc)
     para(doc, "Table of Contents", bold=True, size=16, color=NAVY)

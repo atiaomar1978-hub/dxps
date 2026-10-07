@@ -41,23 +41,21 @@ The installer scripts fetch these versions (all can be overridden, see section 8
 
 ## 3. Package contents
 
-```
-DxPS_Delivery_<date>/
-  README.txt                       start here
-  SHA256SUMS.txt                   checksums of every file in the package
-  dxps-source-<date>.zip           source for Windows (CRLF-safe)
-  dxps-source-<date>.tar.gz        source for Ubuntu/macOS (scripts keep their execute bit)
-  docs/
-    DxPS_TO-BE_HLD_LLD.docx/.pdf             design (HLD + LLD)
-    DxPS_Test_Cases_and_Results.docx/.pdf    test cases, results, security, payloads
-    DxPS_Installation_and_Running_Guide.docx/.pdf   this guide
-  evidence/                        tests.json, coverage, probes, govulncheck, gosec, payload traces
+The release (GitHub release v<version>, or the DxPS_Delivery_<date> folder) contains:
 
-dxps/ (inside the source archive)
-  cmd/        gateway orchestrator adapter eventhub netsim dashboard dxpsctl
-  internal/   24 packages (catalog, planner, saga, bus, store, ...) with their tests
-  scripts/    *.ps1 for Windows, *.sh for Ubuntu and macOS
-  INSTALL.md  this guide in Markdown
+```
+dxps-<version>-windows.zip        Windows bundle (source, scripts, manuals)
+dxps-<version>-ubuntu.tar.gz      Ubuntu / macOS bundle (same content; scripts keep their execute bit)
+dxps-<version>-evidence.zip       test evidence: tests.json, coverage, probes, govulncheck, gosec, payload traces
+SHA256SUMS.txt                    checksums of the files above
+
+dxps/ (inside each bundle)
+  RELEASE.txt  start here: contents and quick start for the platform
+  cmd/         gateway orchestrator adapter eventhub netsim dashboard dxpsctl
+  internal/    24 packages (catalog, planner, saga, bus, store, ...) with their tests
+  scripts/     *.ps1 for Windows, *.sh for Ubuntu and macOS
+  docs/manuals/  HLD+LLD, Test Cases and Results, Components and Data Guide, this guide (docx + pdf)
+  INSTALL.md   this guide in Markdown
 ```
 
 All scripts keep their state in one runtime directory, by default %USERPROFILE%\dxps-runtime on Windows and ~/dxps-runtime on Ubuntu and macOS (override with DXPS_RUNTIME). The source tree is never modified.
@@ -76,7 +74,7 @@ All scripts keep their state in one runtime directory, by default %USERPROFILE%\
 
 ## 4. Windows 10/11 - step by step
 
-**Step 1 - Unpack the source.** Extract dxps-source-<date>.zip, for example to C:\dxps. Open Windows PowerShell in that folder (the folder that contains go.mod) and allow local scripts for this window only.
+**Step 1 - Unpack the source.** Extract dxps-<version>-windows.zip, for example to C:\ (it creates C:\dxps). Open Windows PowerShell in that folder (the folder that contains go.mod) and allow local scripts for this window only.
 
 ```powershell
 cd C:\dxps
@@ -125,7 +123,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 **Step 1 - Unpack the source.** Use a normal user with sudo rights, not root: PostgreSQL refuses to run as root.
 
 ```bash
-mkdir -p ~/dxps && tar -xzf dxps-source-<date>.tar.gz -C ~/dxps --strip-components=1
+mkdir -p ~/dxps && tar -xzf dxps-<version>-ubuntu.tar.gz -C ~/dxps --strip-components=1
 cd ~/dxps
 ```
 
@@ -173,10 +171,10 @@ xcode-select --install
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-**Step 2 - Unpack the source.**
+**Step 2 - Unpack the source.** Use the Ubuntu bundle; it is the same for macOS.
 
 ```bash
-mkdir -p ~/dxps && tar -xzf dxps-source-<date>.tar.gz -C ~/dxps --strip-components=1
+mkdir -p ~/dxps && tar -xzf dxps-<version>-ubuntu.tar.gz -C ~/dxps --strip-components=1
 cd ~/dxps
 ```
 

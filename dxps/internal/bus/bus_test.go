@@ -83,8 +83,35 @@ func tempTopics(t *testing.T, brokers []string, n int, parts int32) []string {
 	if _, err := adm.CreateTopics(ctx, parts, 1, cfg, names...); err != nil {
 		t.Fatal(err)
 	}
+	// CreateTopics returns before the partitions have leaders; producing earlier can exceed the 5 s
+	// delivery timeout of the fast producer on a broker with many partitions.
+	for !topicsReady(ctx, adm, names, parts) {
+		if ctx.Err() != nil {
+			t.Fatal("temp topics have no leaders:", names)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	t.Cleanup(cl.Close)
 	return names
+}
+
+func topicsReady(ctx context.Context, adm *kadm.Client, names []string, parts int32) bool {
+	md, err := adm.Metadata(ctx, names...)
+	if err != nil {
+		return false
+	}
+	for _, n := range names {
+		td, ok := md.Topics[n]
+		if !ok || td.Err != nil || int32(len(td.Partitions)) != parts {
+			return false
+		}
+		for _, p := range td.Partitions {
+			if p.Err != nil || p.Leader < 0 {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func readAll(t *testing.T, brokers []string, topic string, want int, timeout time.Duration) []*kgo.Record {
