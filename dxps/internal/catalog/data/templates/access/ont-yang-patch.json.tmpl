@@ -1,0 +1,19 @@
+{
+  "ietf-yang-patch:yang-patch": {
+    "patch-id": {{ json .TaskID }},
+    "edit": [{
+      "edit-id": "ont-1",
+      "operation": "merge",
+      "target": {{ json (printf "/bbf-xpon-onu-states:onus/onu=%s" .Params.ontSerial) }},
+      "value": {
+        "bbf-xpon-onu:onu": [{
+          "name": {{ json .Params.ontSerial }},
+          "olt-port": {{ json .Params.oltPort }},
+          "vlan": {{ json .Params.vlan }},
+          "downstream-mbps": {{ json .Params.speedMbps }},
+          "tenant": {{ json .Tenant }}
+        }]
+      }
+    }]
+  }
+}

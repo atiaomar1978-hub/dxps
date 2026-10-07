@@ -1,0 +1,6 @@
+{
+  "impu": [{{ json (printf "sip:+%s@ims.mnc077.mcc416.3gppnetwork.org" .Params.msisdn) }}, {{ json (printf "tel:+%s" .Params.msisdn) }}],
+  "impi": {{ json (printf "%s@ims.mnc077.mcc416.3gppnetwork.org" .Params.supi) }},
+  "serviceProfile": "VoNR-DEFAULT",
+  "barring": false
+}

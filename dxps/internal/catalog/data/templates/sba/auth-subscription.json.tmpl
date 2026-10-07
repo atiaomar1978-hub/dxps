@@ -1,0 +1,10 @@
+{
+  "authenticationMethod": "5G_AKA",
+  "encPermanentKey": {{ json (printf "hsm://%s/k/%s" .Tenant .Params.supi) }},
+  "protectionParameterId": "pp-01",
+  "sequenceNumber": {"sqnScheme": "NON_TIME_BASED", "sqn": "000000000020", "lastIndexes": {"ausf": 0}},
+  "authenticationManagementField": "8000",
+  "algorithmId": "milenage",
+  "encOpcKey": {{ json (printf "hsm://%s/opc/%s" .Tenant .Params.supi) }},
+  "supi": {{ json .Params.supi }}
+}

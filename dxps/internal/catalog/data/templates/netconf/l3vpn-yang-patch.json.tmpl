@@ -1,0 +1,19 @@
+{
+  "ietf-yang-patch:yang-patch": {
+    "patch-id": {{ json .TaskID }},
+    "edit": [{
+      "edit-id": "site-1",
+      "operation": "merge",
+      "target": {{ json (printf "/ietf-l3vpn-svc:l3vpn-svc/sites/site=%s" .Params.siteId) }},
+      "value": {
+        "ietf-l3vpn-svc:site": [{
+          "site-id": {{ json .Params.siteId }},
+          "site-vpn-flavors": {"site-vpn-flavor": "site-vpn-flavor-single"},
+          "vpn-policies": {"vpn-policy": [{"vpn-policy-id": {{ json .Params.vpnId }}, "entries": [{"id": "1", "filters": {"filter": [{"type": "lan", "lan-tag": [{{ json .Params.prefix }}]}]}}]}]},
+          "service": {"qos": {"svc-input-bandwidth": {{ json .Params.bandwidthMbps }}, "svc-output-bandwidth": {{ json .Params.bandwidthMbps }}}},
+          "tenant": {{ json .Tenant }}
+        }]
+      }
+    }]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "impu": {{ json (printf "tel:+%s" .Params.msisdn) }},
+  "services": {
+    "vonr": {"active": true},
+    "oip": {"active": true},
+    "cdiv": {"cfu": {"active": {{ if index .Params "cfu" }}true{{ else }}false{{ end }}, "target": {{ json (default "" (index .Params "cfu")) }}}}
+  }
+}

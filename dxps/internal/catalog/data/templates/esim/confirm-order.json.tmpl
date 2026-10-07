@@ -1,0 +1,7 @@
+{
+  "header": {"functionRequesterIdentifier": {{ json .Tenant }}, "functionCallIdentifier": {{ json .TaskID }}},
+  "iccid": {{ json (need "download.iccid" (index (index .Results "download") "iccid")) }},
+  "eid": {{ json .Params.eid }},
+  "releaseFlag": true,
+  "confirmationCode": ""
+}

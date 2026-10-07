@@ -1,0 +1,10 @@
+{
+  "@type": "BillingAccount",
+  "name": {{ json (printf "acc-%s" .Params.msisdn) }},
+  "accountType": "prepaid",
+  "relatedParty": [{"id": {{ json .Tenant }}, "role": "brand", "@referredType": "Organization"}],
+  "characteristic": [
+    {"name": "msisdn", "value": {{ json .Params.msisdn }}},
+    {"name": "plan", "value": {{ json .Params.plan }}}
+  ]
+}

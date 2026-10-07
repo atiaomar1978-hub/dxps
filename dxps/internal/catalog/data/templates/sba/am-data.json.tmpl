@@ -1,0 +1,9 @@
+{
+  "gpsis": [{{ json (printf "msisdn-%s" .Params.msisdn) }}],
+  "subscribedUeAmbr": {"uplink": "200 Mbps", "downlink": "1 Gbps"},
+  "nssai": {"defaultSingleNssais": [{"sst": 1, "sd": {{ json (default "000001" (index .Params "snssai")) }}}]},
+  "ratRestrictions": [],
+  "internalGroupIds": [{{ json (default "dxps-default" .SubscriberGroup) }}],
+  "subscribedDnnList": [{{ json (default "internet" (index .Params "dnn")) }}],
+  "vendorSpecific-dxps": {"plan": {{ json .Params.plan }}, "tenant": {{ json .Tenant }}}
+}

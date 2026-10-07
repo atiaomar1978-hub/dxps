@@ -1,0 +1,6 @@
+{
+  "msisdn": {{ json .Params.msisdn }},
+  "donorNetwork": {{ json .Params.donor }},
+  "recipientNetwork": {{ json .Tenant }},
+  "routingNumber": {{ json (printf "RN-%s" (upper .Tenant)) }}
+}

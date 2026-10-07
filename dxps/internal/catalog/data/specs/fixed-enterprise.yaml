@@ -1,0 +1,75 @@
+# DxPS catalog - fixed access, enterprise transport and network exposure (GLOBAL defaults)
+tenant: GLOBAL
+spec: ActivateFTTH
+version: 1.0.0
+description: Activate FTTH service on OLT (BBF TR-385 YANG via RESTCONF) then configure the CPE (TR-369 USP)
+txMode: ATOMIC
+priorityDefault: P2
+params:
+  required: [ontSerial, oltPort, vlan, cpeEndpoint, speedMbps]
+  properties:
+    ontSerial:   {type: string, pattern: "^[A-Z]{4}[0-9A-F]{8}$"}
+    oltPort:     {type: string, pattern: "^[0-9]{1,2}/[0-9]{1,2}/[0-9]{1,3}$"}
+    vlan:        {type: integer, minimum: 2, maximum: 4094}
+    cpeEndpoint: {type: string, pattern: "^os::[0-9A-F]{6}-[A-Za-z0-9]{1,32}$"}
+    speedMbps:   {type: integer, minimum: 10, maximum: 10000}
+entityKeys: ["'ont:' + params.ontSerial"]
+tasks:
+  - id: ont
+    ne: {nfType: OLT}
+    domain: access
+    op: access.ont.patch
+    template: access/ont-yang-patch.json.tmpl
+    compensate: access.ont.delete
+  - id: cpe
+    dependsOn: [ont]
+    ne: {nfType: USP_CTRL}
+    domain: access
+    op: access.cpe.set
+    template: access/usp-set.json.tmpl
+example: {ontSerial: "HWTC1A2B3C4D", oltPort: "1/1/7", vlan: 100, cpeEndpoint: "os::00D09E-CPE0001", speedMbps: 1000}
+---
+tenant: GLOBAL
+spec: CreateL3VPN
+version: 1.0.0
+description: Enterprise L3VPN site (IETF L3SM RFC 8299) via RESTCONF YANG-Patch (RFC 8072)
+txMode: ATOMIC
+priorityDefault: P2
+params:
+  required: [vpnId, siteId, prefix, bandwidthMbps]
+  properties:
+    vpnId:         {type: string, pattern: "^[A-Za-z0-9_-]{1,32}$"}
+    siteId:        {type: string, pattern: "^[A-Za-z0-9_-]{1,32}$"}
+    prefix:        {type: string, pattern: "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"}
+    bandwidthMbps: {type: integer, minimum: 1, maximum: 100000}
+entityKeys: ["'vpn:' + params.vpnId + ':' + params.siteId"]
+tasks:
+  - id: site
+    ne: {nfType: ROUTER}
+    domain: netconf
+    op: netconf.l3vpn.patch
+    template: netconf/l3vpn-yang-patch.json.tmpl
+    compensate: netconf.l3vpn.delete
+example: {vpnId: "ACME-CORP", siteId: "AMMAN-HQ", prefix: "10.20.0.0/24", bandwidthMbps: 500}
+---
+tenant: GLOBAL
+spec: QoDSession
+version: 1.0.0
+description: CAMARA Quality-on-Demand session through the NEF (3GPP AsSessionWithQoS)
+txMode: BEST_EFFORT
+priorityDefault: P1
+params:
+  required: [msisdn, profile, durationSec]
+  properties:
+    msisdn:      {type: string, pattern: "^[0-9]{8,15}$"}
+    profile:     {type: string, enum: [QOS_E, QOS_S, QOS_M, QOS_L]}
+    durationSec: {type: integer, minimum: 60, maximum: 86400}
+entityKeys: ["'msisdn:' + params.msisdn"]
+tasks:
+  - id: qod
+    ne: {nfType: NEF}
+    domain: exposure
+    op: camara.qod.create
+    template: exposure/qod-session.json.tmpl
+    compensate: camara.qod.delete
+example: {msisdn: "962790000001", profile: QOS_L, durationSec: 3600}

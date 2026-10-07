@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DxPS Mosaic - real-time provisioning</title>
+<link rel="stylesheet" href="app.css">
+<link rel="icon" href="data:,">
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <div class="logo"><span></span><span></span><span></span><span></span></div>
+    <div>
+      <h1>DxPS <em>Mosaic</em></h1>
+      <p>Multi-tenant real-time provisioning &middot; TMF641 / TMF688 &middot; Kafka KRaft &middot; PostgreSQL RLS</p>
+    </div>
+  </div>
+  <div class="svc" id="svc"></div>
+  <div class="clock"><span id="clock">--:--:--</span><small id="age">connecting...</small></div>
+</header>
+
+<section class="kpis" id="kpis"></section>
+
+<main class="mosaic">
+  <article class="tile w6 h2" id="t-throughput"><h2>Throughput <small>orders &amp; NE tasks per minute, consumer lag</small></h2><div class="body"></div></article>
+  <article class="tile w3 h2" id="t-states"><h2>Order states</h2><div class="body"></div></article>
+  <article class="tile w3 h2" id="t-load"><h2>Load generator <small>TMF641 via gateway</small></h2><div class="body">
+    <form id="loadform" class="form">
+      <label>Orders <input id="f-count" type="number" min="1" max="20000" value="300"></label>
+      <label>Rate /s <input id="f-rate" type="number" min="1" max="500" value="25"></label>
+      <label class="wide">Chaos <input id="f-chaos" type="range" min="0" max="0.5" step="0.05" value="0.1"><output id="o-chaos">10%</output></label>
+      <button type="submit" id="b-load" class="btn primary">Start load</button>
+    </form>
+    <div id="loadstat" class="loadstat"></div>
+  </div></article>
+
+  <article class="tile w7 h2" id="t-tenants"><h2>Tenants <small>DRR share of business commands, orders by state</small></h2><div class="body"></div></article>
+  <article class="tile w5 h2" id="t-lanes"><h2>Priority lanes <small>strict P0, WRR 4:2:1, tenant DRR</small></h2><div class="body"></div></article>
+
+  <article class="tile w8 h3" id="t-ne"><h2>Network elements <small>adapter view + simulator view, click to inject faults</small></h2><div class="body"></div></article>
+  <article class="tile w4 h3" id="t-domains"><h2>NE tasks by domain</h2><div class="body"></div></article>
+
+  <article class="tile w8 h3" id="t-payloads"><h2>Live southbound payloads <small>mTLS / HTTP/2 exchanges with simulators</small></h2><div class="body split">
+    <div class="feed" id="feed"></div><pre class="json" id="json">Select an exchange to inspect request and response payloads.</pre></div></article>
+  <article class="tile w4 h3" id="t-topics"><h2>Kafka topics <small>log end offsets, consumer group lag</small></h2><div class="body"></div></article>
+
+  <article class="tile w6 h3" id="t-orders"><h2>Recent orders</h2><div class="body"></div></article>
+  <article class="tile w6 h3" id="t-security"><h2>Security probes <small>live attacks against the running gateway &amp; NEs</small>
+    <button id="b-probe" class="btn">Run probes</button></h2><div class="body"></div></article>
+
+  <article class="tile w4 h2" id="t-hooks"><h2>TMF688 webhooks <small>HMAC-SHA256 signed</small></h2><div class="body"></div></article>
+  <article class="tile w4 h2" id="t-tests"><h2>Test suite <small>go test -cover</small></h2><div class="body"></div></article>
+  <article class="tile w4 h2" id="t-catalog"><h2>Command catalog <small>tenant overrides highlighted</small></h2><div class="body"></div></article>
+</main>
+
+<dialog id="fault">
+  <form method="dialog" id="faultform" class="form">
+    <h3 id="fault-title">Inject fault</h3>
+    <label class="wide">Extra latency <input id="fd-lat" type="range" min="0" max="2000" step="10" value="0"><output id="fo-lat">0 ms</output></label>
+    <label class="wide">Error rate <input id="fd-err" type="range" min="0" max="1" step="0.05" value="0"><output id="fo-err">0%</output></label>
+    <div class="row"><button value="cancel" class="btn">Cancel</button><button id="fd-reset" value="reset" class="btn">Reset</button><button id="fd-apply" value="apply" class="btn primary">Apply</button></div>
+  </form>
+</dialog>
+<footer>DxPS &middot; tenant-scoped everywhere: <code>PRIMARY KEY (tenant, id)</code> &middot; FORCE ROW LEVEL SECURITY &middot; TLS 1.3 &amp; mTLS &middot; exactly-once adapters</footer>
+</body>
+</html>

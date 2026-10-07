@@ -1,0 +1,6 @@
+{
+  "@type": "Product",
+  "name": {{ json .Params.plan }},
+  "productOffering": {"id": {{ json .Params.plan }}},
+  "characteristic": [{"name": "msisdn", "value": {{ json .Params.msisdn }}}]
+}

@@ -1,0 +1,14 @@
+{
+  "header": {"msgId": {{ json .TaskID }}, "msgType": "SET"},
+  "body": {"request": {"set": {
+    "allowPartial": false,
+    "updateObjs": [{
+      "objPath": "Device.WiFi.SSID.1.",
+      "paramSettings": [{"param": "Enable", "value": "true", "required": true},
+                        {"param": "SSID", "value": {{ json (printf "%s-%s" (upper .Tenant) .Params.ontSerial) }}, "required": true}]
+    }, {
+      "objPath": "Device.QoS.Shaper.1.",
+      "paramSettings": [{"param": "ShapingRate", "value": {{ json (printf "%v" .Params.speedMbps) }}, "required": true}]
+    }]
+  }}}
+}

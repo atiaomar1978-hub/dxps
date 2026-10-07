@@ -1,0 +1,273 @@
+# DxPS catalog - 5G SA mobile subscriber lifecycle (GLOBAL defaults)
+tenant: GLOBAL
+spec: CreateSubscriber5G
+version: 3.2.0
+description: Create a 5G SA subscriber (UDR auth + AM + SMF selection + policy, then OCS account)
+txMode: ATOMIC
+priorityDefault: P1
+params:
+  required: [supi, msisdn, plan]
+  properties:
+    supi:   {type: string, pattern: "^imsi-[0-9]{15}$"}
+    msisdn: {type: string, pattern: "^[0-9]{8,15}$"}
+    plan:   {type: string, pattern: "^[A-Za-z0-9_-]{1,32}$"}
+    snssai: {type: string, pattern: "^[0-9]{1,3}-[0-9A-Fa-f]{6}$"}
+    dnn:    {type: string, pattern: "^[a-z0-9.-]{1,63}$"}
+entityKeys: ["'supi:' + params.supi", "'msisdn:' + params.msisdn"]
+tasks:
+  - id: auth
+    ne: {nfType: UDR}
+    domain: sba
+    op: udr.authSubscription.put
+    template: sba/auth-subscription.json.tmpl
+    compensate: udr.authSubscription.delete
+  - id: am
+    dependsOn: [auth]
+    ne: {nfType: UDR}
+    domain: sba
+    op: udr.amData.put
+    template: sba/am-data.json.tmpl
+    coalesceKey: "'udr-am:' + params.supi"
+    compensate: udr.amData.delete
+  - id: smf
+    dependsOn: [auth]
+    ne: {nfType: UDR}
+    domain: sba
+    op: udr.smfSelection.put
+    template: sba/smf-selection.json.tmpl
+    compensate: udr.smfSelection.delete
+  - id: policy
+    dependsOn: [auth]
+    when: "params.plan.startsWith('5G')"
+    ne: {nfType: UDR}
+    domain: sba
+    op: udr.policyData.put
+    template: sba/policy-data.json.tmpl
+    compensate: udr.policyData.delete
+  - id: ocs
+    dependsOn: [am, smf]
+    ne: {nfType: OCS}
+    domain: bss
+    op: bss.account.create
+    template: bss/account.json.tmpl
+    compensate: bss.account.delete
+    pivot: true
+example: {supi: imsi-416770000000001, msisdn: "962790000001", plan: 5G-100GB}
+---
+tenant: GLOBAL
+spec: AddVoNR
+version: 1.1.0
+description: Add IMS identities and VoNR/MMTel service profile
+txMode: ATOMIC
+priorityDefault: P1
+params:
+  required: [supi, msisdn]
+  properties:
+    supi:   {type: string, pattern: "^imsi-[0-9]{15}$"}
+    msisdn: {type: string, pattern: "^[0-9]{8,15}$"}
+    cfu:    {type: string, pattern: "^[0-9]{0,15}$"}
+entityKeys: ["'supi:' + params.supi"]
+tasks:
+  - id: impi
+    ne: {nfType: IMS_PG}
+    domain: ims
+    op: ims.impi.put
+    template: ims/impi.json.tmpl
+    compensate: ims.impi.delete
+  - id: impu
+    dependsOn: [impi]
+    ne: {nfType: IMS_PG}
+    domain: ims
+    op: ims.impu.put
+    template: ims/impu.json.tmpl
+    compensate: ims.impu.delete
+  - id: mmtel
+    dependsOn: [impu]
+    ne: {nfType: IMS_PG}
+    domain: ims
+    op: ims.mmtel.put
+    template: ims/mmtel.json.tmpl
+    compensate: ims.mmtel.delete
+example: {supi: imsi-416770000000001, msisdn: "962790000001"}
+---
+tenant: GLOBAL
+spec: SuspendSubscriber
+version: 1.0.0
+description: Fraud / lawful barring - P0 pre-emptive suspend of all services
+txMode: BEST_EFFORT
+priorityDefault: P0
+preempt: true
+params:
+  required: [supi, reason]
+  properties:
+    supi:   {type: string, pattern: "^imsi-[0-9]{15}$"}
+    reason: {type: string, enum: [FRAUD, LAWFUL, NON_PAYMENT, CUSTOMER_REQUEST]}
+entityKeys: ["'supi:' + params.supi"]
+tasks:
+  - id: bar
+    ne: {nfType: UDR}
+    domain: sba
+    op: udr.amData.patch
+    template: sba/am-barring.json.tmpl
+example: {supi: imsi-416770000000001, reason: FRAUD}
+---
+tenant: GLOBAL
+spec: ChangePlan
+version: 1.0.0
+description: Change subscriber plan (AM data + OCS bundle)
+txMode: PARTIAL_ALLOWED
+priorityDefault: P2
+params:
+  required: [supi, msisdn, plan]
+  properties:
+    supi:   {type: string, pattern: "^imsi-[0-9]{15}$"}
+    msisdn: {type: string, pattern: "^[0-9]{8,15}$"}
+    plan:   {type: string, pattern: "^[A-Za-z0-9_-]{1,32}$"}
+entityKeys: ["'supi:' + params.supi"]
+tasks:
+  - id: am
+    ne: {nfType: UDR}
+    domain: sba
+    op: udr.amData.put
+    template: sba/am-data.json.tmpl
+    coalesceKey: "'udr-am:' + params.supi"
+  - id: bundle
+    ne: {nfType: OCS}
+    domain: bss
+    op: bss.bundle.create
+    template: bss/bundle.json.tmpl
+example: {supi: imsi-416770000000001, msisdn: "962790000001", plan: 5G-200GB}
+---
+tenant: GLOBAL
+spec: DeleteSubscriber5G
+version: 1.0.0
+description: Remove a 5G subscriber (best effort, reverse order)
+txMode: BEST_EFFORT
+priorityDefault: P2
+params:
+  required: [supi, msisdn]
+  properties:
+    supi:   {type: string, pattern: "^imsi-[0-9]{15}$"}
+    msisdn: {type: string, pattern: "^[0-9]{8,15}$"}
+entityKeys: ["'supi:' + params.supi", "'msisdn:' + params.msisdn"]
+tasks:
+  - id: ocs
+    ne: {nfType: OCS}
+    domain: bss
+    op: bss.account.delete
+  - id: policy
+    dependsOn: [ocs]
+    ne: {nfType: UDR}
+    domain: sba
+    op: udr.policyData.delete
+  - id: smf
+    dependsOn: [ocs]
+    ne: {nfType: UDR}
+    domain: sba
+    op: udr.smfSelection.delete
+  - id: am
+    dependsOn: [ocs]
+    ne: {nfType: UDR}
+    domain: sba
+    op: udr.amData.delete
+  - id: auth
+    dependsOn: [policy, smf, am]
+    ne: {nfType: UDR}
+    domain: sba
+    op: udr.authSubscription.delete
+example: {supi: imsi-416770000000001, msisdn: "962790000001"}
+---
+tenant: GLOBAL
+spec: ProvisionESIM
+version: 2.0.0
+description: GSMA SGP.22 ES2+ DownloadOrder then ConfirmOrder (ICCID from the first step)
+txMode: ATOMIC
+priorityDefault: P1
+params:
+  required: [eid, msisdn, profileType]
+  properties:
+    eid:         {type: string, pattern: "^[0-9]{32}$"}
+    msisdn:      {type: string, pattern: "^[0-9]{8,15}$"}
+    profileType: {type: string, pattern: "^[A-Za-z0-9_-]{1,32}$"}
+entityKeys: ["'eid:' + params.eid"]
+tasks:
+  - id: download
+    ne: {nfType: SMDP}
+    domain: esim
+    op: esim.downloadOrder
+    template: esim/download-order.json.tmpl
+    compensate: esim.cancelOrder
+    compensateTemplate: esim/cancel-order.json.tmpl
+  - id: confirm
+    dependsOn: [download]
+    ne: {nfType: SMDP}
+    domain: esim
+    op: esim.confirmOrder
+    template: esim/confirm-order.json.tmpl
+    pivot: true
+example: {eid: "89049032000001000000000000000123", msisdn: "962790000001", profileType: "5G-CONSUMER"}
+---
+tenant: GLOBAL
+spec: PortInNumber
+version: 1.0.0
+description: Number portability port-in (NPDB) and OCS account update
+txMode: PARTIAL_ALLOWED
+priorityDefault: P2
+params:
+  required: [msisdn, donor]
+  properties:
+    msisdn: {type: string, pattern: "^[0-9]{8,15}$"}
+    donor:  {type: string, pattern: "^[A-Za-z0-9_-]{2,20}$"}
+entityKeys: ["'msisdn:' + params.msisdn"]
+tasks:
+  - id: npdb
+    ne: {nfType: NPDB}
+    domain: bss
+    op: npdb.port.put
+    template: bss/npdb-port.json.tmpl
+    compensate: npdb.port.delete
+example: {msisdn: "962790000777", donor: "OPERATOR-X"}
+---
+# mvno-alpha (FULL_MVNO) override: its own OCS charges an onboarding bundle after the account.
+tenant: mvno-alpha
+spec: CreateSubscriber5G
+version: 3.2.0-alpha.1
+description: mvno-alpha variant - own OCS account + welcome bundle
+txMode: ATOMIC
+priorityDefault: P1
+params:
+  required: [supi, msisdn, plan]
+  properties:
+    supi:   {type: string, pattern: "^imsi-[0-9]{15}$"}
+    msisdn: {type: string, pattern: "^[0-9]{8,15}$"}
+    plan:   {type: string, pattern: "^[A-Za-z0-9_-]{1,32}$"}
+entityKeys: ["'supi:' + params.supi", "'msisdn:' + params.msisdn"]
+tasks:
+  - id: auth
+    ne: {nfType: UDR}
+    domain: sba
+    op: udr.authSubscription.put
+    template: sba/auth-subscription.json.tmpl
+    compensate: udr.authSubscription.delete
+  - id: am
+    dependsOn: [auth]
+    ne: {nfType: UDR}
+    domain: sba
+    op: udr.amData.put
+    template: sba/am-data.json.tmpl
+    compensate: udr.amData.delete
+  - id: ocs
+    dependsOn: [am]
+    ne: {nfType: OCS}
+    domain: bss
+    op: bss.account.create
+    template: bss/account.json.tmpl
+    compensate: bss.account.delete
+  - id: welcome
+    dependsOn: [ocs]
+    ne: {nfType: OCS}
+    domain: bss
+    op: bss.bundle.create
+    template: bss/bundle.json.tmpl
+    pivot: true
+example: {supi: imsi-416771000000001, msisdn: "962791000001", plan: 5G-ALPHA-50}

@@ -1,0 +1,7 @@
+{
+  "device": {"phoneNumber": {{ json (printf "+%s" .Params.msisdn) }}},
+  "applicationServer": {"ipv4Address": "198.51.100.10"},
+  "qosProfile": {{ json .Params.profile }},
+  "duration": {{ json .Params.durationSec }},
+  "sink": "https://localhost:9109/camara/notifications"
+}
