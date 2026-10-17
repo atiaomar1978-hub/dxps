@@ -26,6 +26,7 @@ isolated data, its own priorities and quotas, and its own variants of the provis
 | **Event notifications** | Order state changes go to tenant webhooks as TMF688 events, signed with HMAC-SHA256, with bounded retries. |
 | **Network simulators** | Realistic NE simulators over HTTP/2 with mutual TLS. They validate payloads, keep state per tenant, and support injected faults and latency, so the whole flow runs end to end without a real network. |
 | **Mosaic dashboard** | A live operations view of tenants, priority lanes, Kafka topics and lag, orders, NE health and latency, payload exchanges, webhooks, security probes and test results. |
+| **DxPS console** | A signed-in web console for operations and configuration: orders with their task graphs and payloads, dead letters, NE simulators and fault injection, the service catalog, a catalog studio for drafts, a Template Lab for dry runs, an order composer, tenant and NE inventory editing, reports, users and roles. See [DxPS console](#dxps-console). |
 
 ## How an order flows
 
@@ -41,6 +42,10 @@ flowchart LR
     O -->|OrderEvent| E[Event hub]
     E -->|TMF688 webhook<br/>HMAC signed| C
     O -.->|metrics| M[Mosaic dashboard]
+    U[Console UI] -->|BFF| K[Console API]
+    K -->|read views, inventory edits| P
+    K -->|orders and cancels| G
+    K -.->|lag, DLQ, faults| A
 ```
 
 1. The **gateway** authenticates the caller and gets the tenant from the token. It deduplicates on the client
@@ -63,6 +68,8 @@ flowchart LR
 | `eventhub` | Signed TMF688 webhook delivery | 9203 (stats) |
 | `netsim` | NE simulators: NRF, UDR, IMS, RESTCONF/USP, SM-DP+, OCS, NPDB, NEF/CAMARA, hub sink | 9101-9109, admin 9199 |
 | `dashboard` | Mosaic live dashboard | 8088 |
+| `console` | Console API: sessions and roles, cross-tenant views, inventory edits, catalog drafts, Template Lab, audit | 8446 (loopback, TLS) |
+| console UI | Next.js web console (`dxps/console/`) in front of the console API | 8092 (TLS) |
 | `dxpsctl` | Operations CLI: secrets, dev PKI, migrations, seeding, topics, tokens, DLQ re-drive, API calls, order trace, test report | - |
 
 Infrastructure: **PostgreSQL 18** (TLS 1.3, SCRAM) and **Apache Kafka 4** (KRaft, no ZooKeeper).
@@ -82,6 +89,66 @@ Infrastructure: **PostgreSQL 18** (TLS 1.3, SCRAM) and **Apache Kafka 4** (KRaft
 
 Tenants can override any spec. For example, `mvno-alpha` runs its own OCS and adds a welcome bundle to
 `CreateSubscriber5G`. No code changes are needed.
+
+## DxPS console
+
+The console is where people run and configure the platform. It is served at **https://localhost:8092**, and you
+sign in with a console account. Each role includes the ones before it:
+
+| Role | Can |
+|---|---|
+| `viewer` | See every page |
+| `operator` | Also submit and cancel orders, inject NE faults, redrive dead letters, start load runs and probes |
+| `configurator` | Also edit tenants, NE limits and entitlements, work on catalog drafts and use the Template Lab |
+| `admin` | Also manage users |
+
+![DxPS console dashboard](dxps/docs/console/dashboard.png)
+
+| Area | Pages |
+|---|---|
+| **Operations** | **Dashboard** (service health, order and task volumes, state mix per tenant, NE latency, scheduler queues) · **Service orders** (filter and search; each order shows its task graph, the request and response for every NE task, attempts, the TMF641 request, audit, and Cancel) · **NE tasks** · **Dead letters** (inspect and redrive) · **Network & simulators** (NE health, simulator stats, fault injection, recent payload exchanges) · **Kafka** (priority lanes, consumer lag) |
+| **Configuration** | **Service catalog** (each spec's task graph, parameters, templates and YAML) · **Catalog studio** (draft changes to specs and templates, validate, export) · **Template Lab** (dry run of one order item) · **Order composer** (real TMF641 orders through the gateway) · **Tenants** (SLA tier, weight, quota, status) · **NE inventory** (limits, entitlements on shared NEs) |
+| **Insight** | **Reports** (orders per day, success rate, latency by spec and NE, top errors) · **Load & probes** · **Test results** · **Webhooks** · **Audit trail** (platform and console) |
+| **Administration** | **Users** · **Settings** · **My account** |
+
+**Template Lab.** It resolves the spec the way the orchestrator does: the tenant's override first, then GLOBAL. It
+then validates the parameters, evaluates the `when` rules, entity keys and coalesce keys, and picks a network element
+with the tenant's entitlements. Finally it renders every forward and compensation payload. Nothing is published and
+no NE is called. A valid result can be sent on to the Order composer.
+
+![Template Lab](dxps/docs/console/template-lab.png)
+
+**Catalog changes.** The services run with the catalog compiled in, so catalog changes go through a draft:
+
+1. Create a draft from catalog files, or from a spec with **Create override draft** for a tenant.
+2. Edit it in the **Catalog studio**.
+3. **Validate** it. The whole catalog is loaded with your changes and each spec's example is run through the Lab.
+4. Try it in the **Template Lab**.
+5. **Export** the changed files into `dxps/internal/catalog/data`, then rebuild and restart the services.
+
+Tenant, NE limit and entitlement edits apply live within about 10 seconds. `run-all` re-seeds the demo tenants and
+inventory when it starts.
+
+| Order detail | Catalog spec |
+|---|---|
+| ![Order detail](dxps/docs/console/order-detail.png) | ![Catalog spec](dxps/docs/console/catalog-spec.png) |
+| **Catalog studio** | **NE inventory** |
+| ![Catalog studio](dxps/docs/console/catalog-studio.png) | ![NE inventory](dxps/docs/console/ne-inventory.png) |
+| **Reports** | **Dead letters** |
+| ![Reports](dxps/docs/console/reports.png) | ![Dead letters](dxps/docs/console/dead-letters.png) |
+
+How it is built:
+
+- **Console API (`dxps/cmd/console`, `dxps/internal/console`).**
+  - It listens on loopback only, with a certificate issued from the DxPS development CA.
+  - It reads the database with the operations role. Inventory edits run in a transaction and write a DxPS
+    audit event with actor `console:<user>`.
+  - Orders are submitted through the real gateway with a 2-minute token for the tenant, limited to order read and
+    write.
+  - Users are stored with PBKDF2-SHA256. Five failed sign-ins lock the account for a while, and sessions last 8 hours.
+- **Console UI (`dxps/console`).**
+  - Next.js with a backend-for-frontend: the browser only talks to the UI origin.
+  - The session token is kept in an HttpOnly, SameSite=Strict cookie, and every change needs a CSRF header.
 
 ## Multi-tenancy
 
@@ -119,6 +186,8 @@ Full details, payloads and evidence: `DxPS_Test_Cases_and_Results.pdf`.
 |---|---|
 | `dxps/cmd/` | Service binaries and the `dxpsctl` CLI |
 | `dxps/internal/` | Packages (gateway, orchestrator, planner, scheduler, keylane, saga, bus, store, adapter, netsim, dashboard, auth, pki, ...) with their tests |
+| `dxps/internal/console/` | Console API: data views, live service clients, users, drafts, Template Lab |
+| `dxps/console/` | Console web UI (Next.js) and its tests |
 | `dxps/internal/catalog/data/` | Service specs (YAML) and NE payload templates |
 | `dxps/internal/store/migrations/` | PostgreSQL schema (tenant composite keys, RLS, partitions) |
 | `dxps/scripts/` | Install / setup / run / test / security-scan scripts: `.ps1` for Windows, `.sh` for Ubuntu and macOS |
@@ -151,3 +220,14 @@ powershell -ExecutionPolicy Bypass -File scripts\run-all.ps1
 Then open the Mosaic dashboard at http://127.0.0.1:8088. Run the tests with `scripts/test-all` and the security
 scans with `scripts/sec-scan`, and stop everything with `scripts/infra-stop`. See `dxps/INSTALL.md` for the full
 guide, including how to submit a sample order.
+
+To start the console (Ubuntu or macOS, Node.js 22.12+), run this once the platform is up:
+
+```bash
+cd dxps
+bash scripts/console-run.sh                              # builds and starts the console API (8446) and UI (8092)
+~/dxps-runtime/bin/console useradd -name admin -roles admin   # first user; the password is read from stdin
+```
+
+Then open https://localhost:8092 and sign in. Stop the console with `bash scripts/console-stop.sh`. There is no
+Windows script for the console yet.
