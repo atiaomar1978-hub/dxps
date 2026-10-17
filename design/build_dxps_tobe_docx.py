@@ -178,8 +178,8 @@ def cover(doc):
          size=12, italic=True, color=GREY, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=30)
     table(doc, ["Item", "Value"], [
         ["Document", "DXPS-TOBE-HLD-LLD"],
-        ["Version", "1.1 (Draft for architecture review)"],
-        ["Date", "06 October 2026"],
+        ["Version", "1.2 (Draft for architecture review)"],
+        ["Date", "17 October 2026"],
         ["AS-IS baseline", "Legacy ITS/Huawei provisioning engine (source tree src/prv: TABS / MedProv 6.11.3 engine, SIM 6.5.6.3, PIL 1.1, adaptors, simulators)"],
         ["Tenancy", "Multi-tenant: host MNO and MVNOs. Every table carries tenant varchar(40); primary key is (tenant, id uuid)"],
         ["Target stack", "Go (latest stable), Apache Kafka 4.x (KRaft), PostgreSQL 18+, Kubernetes"],
@@ -406,6 +406,7 @@ def sec_hld(doc, figs):
         ["DxPS Event Hub (Go)", "TMF688 hub registration per tenant; webhook delivery with retries only to that tenant's listeners; Kafka event topic for internal consumers", "Stateless pods"],
         ["DxPS Inventory Service", "TMF638/639; per-tenant projections of activated services/resources", "PostgreSQL schema"],
         ["Outbox Relay", "Safety net that publishes unpublished outbox rows (fast-publish handles the normal path)", "1-3 pods, leader-elected per shard"],
+        ["DxPS Console (Go API + Next.js UI)", "Signed-in operations and configuration console for all tenants: orders, DLQ redrive, NE faults, catalog drafts and Template Lab, tenant and NE inventory edits, reports, console users with roles (section 5.14)", "1 API + 1 UI instance; stateless UI"],
         ["PostgreSQL", "System of record (tenants, orders, BC, plans, tasks, links, catalog, outbox/inbox, audit); PK (tenant, id) on every table; row-level security", "Primary + sync standby + read replicas; partitioned by tenant"],
     ], widths=[1.4, 3.8, 1.4], size=8)
 
@@ -597,6 +598,31 @@ def sec_hld(doc, figs):
         "Per-tenant SLA reports (latency, success rate, volume) for MVNO billing and contracts.",
         "SLO dashboards and alerting (TMF642 alarms for business-impacting failures).",
         "Ops tooling: DLQ replay, order re-drive, task skip/force-complete with dual approval and audit.",
+    ])
+
+    h(doc, "5.14 Operations and configuration console", 2)
+    para(doc, "The DxPS console is the human interface for running and configuring the platform. The Mosaic dashboard "
+              "stays as a read-only live view; the console adds sign-in, roles and changes. It sees all tenants, and "
+              "every change it makes is written to the DxPS audit trail with actor console:<user>.")
+    table(doc, ["Area", "Capabilities"], [
+        ["Operations", "Dashboard of health, rates and lanes; service orders with the task graph and the NE request and response of every attempt; cancel; NE tasks; dead letters with redrive; simulator fault injection; Kafka topics and consumer lag"],
+        ["Configuration", "Service catalog browser; catalog studio (drafts, validate, export); Template Lab (dry run of a spec through the real planner and renderers, no NE called); order composer; tenants (SLA tier, weight, quota, status); NE inventory (limits and entitlements)"],
+        ["Insight", "Reports (volume, success, latency by tenant, spec and NE); load runs and security probes; test results; webhooks; audit trail"],
+        ["Administration", "Console users and roles, settings, own password"],
+    ], widths=[1.4, 5.2], size=8)
+    table(doc, ["Role", "Adds"], [
+        ["viewer", "Read access to every page"],
+        ["operator", "Submit and cancel orders, NE faults, DLQ redrive, load runs and probes"],
+        ["configurator", "Tenant and NE inventory edits, catalog drafts, Template Lab"],
+        ["admin", "Console user management"],
+    ], widths=[1.4, 5.2], size=8)
+    bullets(doc, [
+        "Catalog changes are never applied to running services directly: a draft is validated (the full catalog is "
+        "loaded with the change and every spec example is dry-run), tried in the Lab, exported, reviewed and released "
+        "with the next build, so the catalog stays under version control.",
+        "Tenant, NE and entitlement changes apply live: the services reload the registry within about 10 seconds.",
+        "Orders entered in the console use the same northbound path as any client: the gateway with a short-lived "
+        "tenant token, so quotas, validation and idempotency apply unchanged.",
     ])
 
 
@@ -1306,6 +1332,37 @@ authorization: Bearer <NRF access token>
         "Chaos: broker kill, AZ loss, PostgreSQL failover, consumer rebalance during load. Assert no reorder for an entity and no duplicate NE effect.",
         "Performance: k6 / franz-go bench for 2x NFR load; track p99 per stage via exemplars.",
     ])
+
+    h(doc, "6.16 Console API and web UI", 2)
+    para(doc, "The console (section 5.14) is two processes. The console API (cmd/console, internal/console) is a Go "
+              "HTTPS server bound to loopback (127.0.0.1:8446) with a certificate issued from the platform CA. The web "
+              "UI (dxps/console) is a Next.js 16 application on port 8092 whose server side acts as a backend-for-"
+              "frontend: browser calls to /bff/* are forwarded to /api/v1/* on the console API.")
+    code(doc, r"""
+browser --HTTPS, cookie dxps_console + x-dxps-csrf--> console UI (Next.js BFF, :8092)
+        --HTTPS, Authorization: Bearer <session>-----> console API (Go, 127.0.0.1:8446)
+              |-- PostgreSQL as dxps_ops (all tenants; tenant / NE / entitlement updates + audit_event)
+              |-- Kafka admin + dxps.dlq consumer/producer (lag, dead letters, redrive)
+              |-- stats ports 9201-9203, netsim admin 9199, Mosaic 8088
+              |-- gateway 8443 (TMF641 orders, 2-minute tenant token, order read/write scopes)
+              '-- ~/dxps-runtime/console/ (users.json, drafts/, audit.jsonl)
+""")
+    table(doc, ["Concern", "Design"], [
+        ["Users", "users.json (mode 0600); PBKDF2-SHA256 password hashes; at least 12 characters; five consecutive failures lock the account until an admin resets it. First user created with: console useradd -name NAME -roles admin"],
+        ["Sessions", "Random bearer token per sign-in, held only in memory by the API. The BFF stores it in an HttpOnly, SameSite=Strict, Secure cookie and rejects state-changing requests without the x-dxps-csrf header"],
+        ["Authorisation", "Ordered roles viewer < operator < configurator < admin; every route declares the minimum role and the guard checks it before the handler runs"],
+        ["Data access", "Reads through the dxps_ops pool (cross-tenant). Each update runs in one transaction that reads the before row, applies the change and inserts audit_event (actor console:<user>, before and after)"],
+        ["Catalog drafts", "A draft is a set of changed and deleted spec files over the embedded catalog. Validate overlays it, loads the full catalog and runs every spec example through the Lab; Export returns the files for internal/catalog/data"],
+        ["Template Lab", "Runs the real planner (CEL conditions, DAG) and the adapter renderers for a tenant, spec and parameters; returns tasks, decisions and rendered NE requests; no NE is called and nothing is stored"],
+        ["Console audit", "Sign-ins, failures and every change are appended to audit.jsonl in addition to the DxPS audit_event rows"],
+    ], widths=[1.4, 5.2], size=8)
+    table(doc, ["Routes (/api/v1)", "Minimum role"], [
+        ["auth/login, auth/logout, auth/me, auth/password", "none for login, otherwise viewer"],
+        ["GET overview, orders, orders/{tenant}/{id}, tasks, tenants, nes, catalog, catalog/spec, catalog/files, drafts, kafka, dlq, sims, loadgen, tests, hubs, audit, reports, settings", "viewer"],
+        ["POST orders, orders/{tenant}/{id}/cancel, dlq/redrive, sims/fault, loadgen, probes", "operator"],
+        ["PUT tenants/{id}, nes/{tenant}/{code}, nes/{tenant}/{code}/access; drafts create, save, delete, validate, export; POST lab", "configurator"],
+        ["users (list, add, update, delete)", "admin"],
+    ], widths=[4.8, 1.8], size=8)
 
     h(doc, "7. Migration Strategy (legacy engine -> DxPS)", 1)
     table(doc, ["Phase", "Activities", "Exit criteria"], [

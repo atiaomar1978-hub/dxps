@@ -50,6 +50,8 @@ add(("p", "DxPS is a multi-tenant real-time provisioning system for MNOs and MVN
           "six DxPS services, NE simulators for every southbound interface, and the Mosaic live dashboard."))
 add(("table", ["Component", "Address (loopback only)", "Purpose"], [
     ["Mosaic dashboard", "http://127.0.0.1:8088", "Live view: tenants, lanes, topics, orders, NEs, events, tests; load generator and attack probes"],
+    ["DxPS console (web UI)", "https://localhost:8092", "Signed-in console for operations and configuration: orders, DLQ, simulators, catalog studio, Template Lab, tenants, NE inventory, reports, users (optional, Ubuntu and macOS)"],
+    ["Console API", "https://localhost:8446", "Back end of the console: sessions and roles, cross-tenant views, inventory edits, catalog drafts, audit"],
     ["Gateway (TMF641/TMF688 hub)", "https://localhost:8443", "Northbound API, JWT auth, per-tenant rate limits"],
     ["Orchestrator", "127.0.0.1:9201 (stats)", "Plans orders, runs sagas, dependencies and per-subscriber sequencing"],
     ["Adapter", "127.0.0.1:9202 (stats)", "Southbound drivers: 5G SBA, IMS, NETCONF/USP, eSIM, BSS/OCS, NPDB, CAMARA"],
@@ -70,7 +72,8 @@ add(("table", ["Item", "Minimum", "Recommended"], [
     ["macOS", "macOS 13 Ventura or later, Homebrew, Xcode Command Line Tools", "macOS 14+ on Apple silicon"],
     ["Network", "HTTPS to go.dev/dl.google.com, downloads.apache.org (or archive.apache.org), "
                 "apt.postgresql.org / Homebrew / get.enterprisedb.com, proxy.golang.org", ""],
-    ["Free ports", "5433, 8088, 8443, 9092, 9093, 9101-9109, 9199, 9201-9203", ""],
+    ["Free ports", "5433, 8088, 8443, 9092, 9093, 9101-9109, 9199, 9201-9203 (console: 8092, 8446)", ""],
+    ["Node.js (console only)", "22.12 or later with npm", "Node.js 22 LTS"],
 ]))
 add(("p", "The installer scripts fetch these versions (all can be overridden, see section 8):"))
 add(("table", ["Software", "Windows", "Ubuntu", "macOS"], [
@@ -89,8 +92,9 @@ SHA256SUMS.txt                    checksums of the files above
 
 dxps/ (inside each bundle)
   RELEASE.txt  start here: contents and quick start for the platform
-  cmd/         gateway orchestrator adapter eventhub netsim dashboard dxpsctl
-  internal/    24 packages (catalog, planner, saga, bus, store, ...) with their tests
+  cmd/         gateway orchestrator adapter eventhub netsim dashboard console dxpsctl
+  internal/    packages (catalog, planner, saga, bus, store, console, ...) with their tests
+  console/     DxPS console web UI (Next.js) and its tests
   scripts/     *.ps1 for Windows, *.sh for Ubuntu and macOS
   docs/manuals/  HLD+LLD, Test Cases and Results, Components and Data Guide, this guide (docx + pdf)
   INSTALL.md   this guide in Markdown"""))
@@ -106,6 +110,8 @@ add(("table", ["Script (Windows .ps1 / Ubuntu+macOS .sh)", "What it does", "When
     ["sec-scan", "govulncheck + gosec static security scans", "before delivery"],
     ["infra-stop", "Stops services, Kafka and PostgreSQL", "end of day"],
     ["infra-start", "Starts only PostgreSQL and Kafka", "for development"],
+    ["console-run (.sh only)", "Builds and starts the console API and web UI; needs the platform running and Node.js 22.12+", "to use the console"],
+    ["console-stop (.sh only)", "Stops the console API and web UI", "any time"],
 ]))
 
 # ---------------------------------------------------------------- Windows
@@ -202,8 +208,50 @@ add(("table", ["Path (under the runtime directory)", "Content"], [
     ["secrets.env (mode 0600)", "generated passwords, DSNs and keys - never share or commit"],
     ["pki/", "dev CA and certificates (development only)"],
     ["data/pg, data/kafka", "PostgreSQL cluster and Kafka log directories"],
+    ["console/users.json (mode 0600)", "console accounts: PBKDF2-SHA256 password hashes and roles"],
+    ["console/drafts/, console/audit.jsonl", "catalog drafts and the console's own audit trail"],
+    ["logs/svc/console.out, console-ui.out", "console API and web UI start-up output"],
 ]))
-add(("h2", "7.4 Regenerate the test-case document"))
+add(("h2", "7.4 The DxPS console"))
+add(("p", "The console is a signed-in web application for running and configuring the platform. It reads every tenant's "
+          "orders, tasks and inventory, shows Kafka, dead letters and the simulators live, and lets authorised users edit "
+          "tenants, NE limits and entitlements, work on catalog drafts, dry-run them in the Template Lab and submit real "
+          "orders through the gateway. It runs on Ubuntu and macOS; there is no Windows script for it yet."))
+add(("steps", [
+    ("Install Node.js 22", "Needed only for the console. macOS: brew install node@22 (console-run finds it automatically). "
+     "Ubuntu: install Node.js 22 LTS from NodeSource or nvm so that node and npm are on PATH.", "bash",
+     "node --version   # v22.12 or later"),
+    ("Start the console", "Run this after run-all. It builds the console API and the web UI, starts both detached and "
+     "issues the console certificate from the dev CA on first start. Add --foreground to keep it attached.", "bash",
+     "bash scripts/console-run.sh"),
+    ("Create the first user", "Console accounts are separate from tenants. The password (12 characters or more) is read "
+     "from standard input, or from DXPS_CONSOLE_PASSWORD.", "bash",
+     "~/dxps-runtime/bin/console useradd -name admin -roles admin"),
+    ("Sign in", "Browse to https://localhost:8092 and sign in. Create further accounts with the right roles on the "
+     "Users page. On a remote server, tunnel it: ssh -L 8092:127.0.0.1:8092 user@server.", None, None),
+    ("Stop", "", "bash", "bash scripts/console-stop.sh"),
+]))
+add(("table", ["Role", "Can"], [
+    ["viewer", "See every page"],
+    ["operator", "Also submit and cancel orders, inject NE faults, redrive dead letters, start load runs and probes"],
+    ["configurator", "Also edit tenants, NE limits and entitlements, work on catalog drafts and use the Template Lab"],
+    ["admin", "Also manage console users"],
+]))
+add(("table", ["Area", "Pages"], [
+    ["Operations", "Dashboard, Service orders (task graph, NE requests and responses, attempts, cancel), NE tasks, "
+                   "Dead letters, Network and simulators (fault injection), Kafka"],
+    ["Configuration", "Service catalog, Catalog studio, Template Lab, Order composer, Tenants, NE inventory"],
+    ["Insight", "Reports, Load and probes, Test results, Webhooks, Audit trail"],
+    ["Administration", "Users, Settings, My account"],
+]))
+add(("p", "Changing the catalog: the services run with the catalog compiled in, so catalog changes are made as drafts. "
+          "Create a draft in the Catalog studio (or with Create override draft on a spec), edit it, Validate it (the whole "
+          "catalog is loaded with the change and each spec's example is run through the Lab), try it in the Template Lab, "
+          "then Export it, copy the files into dxps/internal/catalog/data and restart with run-all."))
+add(("note", "Tenant, NE limit and entitlement edits apply live within about 10 seconds and are written to the DxPS "
+             "audit trail with actor console:<user>. run-all re-seeds the demo tenants and inventory when it starts, "
+             "so those edits return to the seed values after a restart."))
+add(("h2", "7.5 Regenerate the test-case document"))
 add(("p", "After test-all, the Word report can be rebuilt from the new results with Python 3.10+, python-docx and "
           "matplotlib (design/build_dxps_testcases_docx.py in the delivery workspace). On Windows, Word exports the PDF; "
           "on Ubuntu/macOS use LibreOffice: soffice --headless --convert-to pdf DxPS_Test_Cases_and_Results.docx."))
@@ -239,6 +287,13 @@ add(("table", ["Symptom", "Cause and fix"], [
     ["macOS: postgresql@18 not found", "brew update && brew install postgresql@18, or set DXPS_PGBIN to another PostgreSQL 18 bin directory."],
     ["Go build downloads fail", "Set HTTPS_PROXY (and GOPROXY if your company mirrors modules)."],
     ["Dashboard shows a service as down", "Restart with run-all; logs/svc/<service>.out shows start-up errors."],
+    ["console-run: 'Node.js 22.12+ is required'", "Install Node.js 22 (section 7.4) and open a new terminal so node is on PATH."],
+    ["console-run: 'UI build failed'", "Read logs/svc/console-ui-build.out. Without network access to the npm registry, "
+                                       "the first build cannot install the UI packages."],
+    ["Console sign-in fails with the right password", "Five wrong passwords in a row lock the account until an admin "
+                                                       "resets its password on the Users page. A disabled account cannot sign in either."],
+    ["Console pages show 'console API unavailable'", "The console API is not running: start it again with console-run "
+                                                     "and read logs/svc/console.out."],
     ["Start from scratch", "Stop the stack, then remove the runtime directory (this deletes all data and secrets) "
                            "and rerun infra-setup."],
 ]))
@@ -248,6 +303,9 @@ add(("bullets", [
     "Secrets are generated locally with crypto/rand, stored only in secrets.env (mode 0600) and never printed by the scripts.",
     "PostgreSQL accepts only TLS 1.3 + SCRAM-SHA-256 on loopback; the application role is subject to row-level security.",
     "All NE simulator links use mutual TLS; the gateway uses TLS with the dev CA; webhooks are HMAC-signed.",
+    "The console API listens on loopback only and the web UI is served over TLS. The session token is kept in an "
+    "HttpOnly, SameSite=Strict, Secure cookie that page scripts cannot read, and every change needs a CSRF header. Orders from the "
+    "console go through the gateway with a 2-minute token limited to order read and write.",
     "The dev CA, PLAINTEXT Kafka on loopback and the single-node layout are for development and demonstration. "
     "Production uses the HLD/LLD deployment (Kafka SASL_SSL, managed PKI/HSM, Kubernetes).",
 ]))
@@ -307,8 +365,8 @@ def to_docx():
     kpi_table(doc, [("steps to a running stack", "4", None), ("platforms", "3", None),
                     ("services + simulators", "6 + 9", None), ("dashboard", "127.0.0.1:8088", None)])
     table(doc, ["Item", "Value"], [
-        ["Document", "DXPS-INSTALL-GUIDE"], ["Version", "1.1"], ["Date", "07 October 2026"],
-        ["Applies to", "DxPS release 1.0.0; Go 1.26.6, PostgreSQL 18, Apache Kafka 4.3.1"],
+        ["Document", "DXPS-INSTALL-GUIDE"], ["Version", "1.2"], ["Date", "17 October 2026"],
+        ["Applies to", "DxPS release 1.0.0 with the DxPS console; Go 1.26.6, PostgreSQL 18, Apache Kafka 4.3.1, Node.js 22"],
     ], widths=[1.6, 5.4])
     page_break(doc)
     para(doc, "Table of Contents", bold=True, size=16, color=NAVY)

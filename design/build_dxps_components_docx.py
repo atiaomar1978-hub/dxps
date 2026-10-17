@@ -47,6 +47,7 @@ add(("table", ["Component", "Technology", "Responsibility", "Code"], [
     ["Catalog", "YAML + CEL", "Service recipes: tasks, dependencies, conditions, compensations, payload templates; per-tenant overrides", "internal/catalog/data"],
     ["Network simulators", "Go, HTTP/2 mTLS", "Stand-ins for NRF, UDR, IMS, RESTCONF/USP, SM-DP+, OCS, NPDB, NEF; fault injection", "internal/netsim"],
     ["Mosaic dashboard", "Go + HTML/JS", "Live operations view and load generator", "internal/dashboard"],
+    ["DxPS console", "Go API + Next.js 16 UI", "Signed-in operations and configuration console: orders, DLQ, simulators, catalog drafts, Template Lab, tenants, NE inventory, reports, users", "cmd/console, internal/console, console/"],
     ["dxpsctl", "Go CLI", "Secrets, PKI, migrations, seed, topics, tokens, DLQ re-drive, API calls, trace, test report", "cmd/dxpsctl"],
 ]))
 
@@ -452,7 +453,28 @@ add(("h2", "5.7 Mosaic dashboard"))
 add(("p", "Reads statistics from every service's loopback stats port, Kafka (topic end offsets, group lag) and PostgreSQL "
           "(as dxps_ops: orders by state, tasks by domain, NE latency percentiles, outbox backlog), and shows them as live "
           "tiles. It also contains a load generator and security probes."))
-add(("h2", "5.8 PKI, secrets and dxpsctl"))
+add(("h2", "5.8 DxPS console"))
+add(("p", "The console is the signed-in tool for operating and configuring DxPS across all tenants. It has two parts: the "
+          "console API (Go, https://localhost:8446, loopback only) and the web UI (Next.js, https://localhost:8092). The "
+          "UI server forwards every call to the API; the session token travels in an HttpOnly, SameSite=Strict cookie "
+          "that page scripts cannot read, and every change must carry a CSRF header. Users have one or more of four roles: viewer, operator (orders, faults, DLQ "
+          "redrive, load runs), configurator (tenants, NE inventory, catalog drafts, Template Lab) and admin (users)."))
+add(("table", ["Data", "Where", "How the console uses it"], [
+    ["Orders, tasks, attempts, NE inventory, audit", "PostgreSQL, as dxps_ops", "Reads across all tenants: lists, order detail with the task graph and the NE request and response of every attempt, reports"],
+    ["tenant, network_element, tenant_ne_access", "PostgreSQL, as dxps_ops", "Updates tenant SLA tier, weight, quota and status, NE limits, and entitlements; each change writes an audit_event row with actor console:<user> and the before and after values"],
+    ["Topics and consumer groups", "Kafka", "End offsets and group lag; dead letters are read from dxps.dlq and redriven to their original topic"],
+    ["Service statistics", "Stats ports 9201-9203, Mosaic 8088, netsim admin 9199", "Health, live rates, simulator latency and fault settings"],
+    ["New orders", "Gateway 8443", "Submitted and cancelled through the TMF641 API with a 2-minute tenant token limited to order read and write"],
+    ["Console users, drafts, console audit", "~/dxps-runtime/console/", "users.json (PBKDF2-SHA256 hashes, mode 0600), drafts/ and audit.jsonl"],
+]))
+add(("p", "Catalog changes use drafts because the services run with the catalog compiled in. A draft holds changed or new "
+          "spec files. Validate loads the whole catalog with the change and runs the example of every spec through "
+          "the Template Lab. The Lab runs the real planner and adapter renderers without calling any NE and shows the "
+          "task graph, the CEL decisions and the exact NE requests. Export produces the files to copy into "
+          "internal/catalog/data before a rebuild."))
+add(("img", "console/order-detail.png", "Console: order detail with the task graph and NE exchange", 6.6))
+add(("img", "console/template-lab.png", "Console: Template Lab dry run", 6.6))
+add(("h2", "5.9 PKI, secrets and dxpsctl"))
 add(("bullets", [
     "dxpsctl secrets generates database passwords, the JWT key and the secret-box key into secrets.env (mode 0600) in the runtime directory.",
     "dxpsctl certs creates the development CA and ECDSA P-256 certificates for PostgreSQL, the gateway, the services and every simulator.",
@@ -493,7 +515,8 @@ def to_markdown():
         elif k == "code":
             out += ["```" + b[1], b[2], "```", ""]
         elif k == "img":
-            out += [f"![{b[2]}](../../design/diagrams/{b[1]})", ""]
+            src = b[1] if b[1].startswith("console/") else f"../../design/diagrams/{b[1]}"
+            out += [f"![{b[2]}]({src})", ""]
         elif k == "table":
             hdr, rows = b[1], b[2]
             out += ["| " + " | ".join(hdr) + " |", "|" + "|".join("---" for _ in hdr) + "|"]
@@ -521,8 +544,8 @@ def to_docx():
     kpi_table(doc, [("PostgreSQL tables", "18", None), ("Kafka topics", "41", None),
                     ("consumer groups", "36", None), ("example order", "303 ms", None)])
     table(doc, ["Item", "Value"], [
-        ["Document", "DXPS-COMPONENTS-GUIDE"], ["Version", "1.0"], ["Date", "07 October 2026"],
-        ["Applies to", "dxps source of the same date; PostgreSQL 18, Apache Kafka 4.3.1, Go 1.26.6"],
+        ["Document", "DXPS-COMPONENTS-GUIDE"], ["Version", "1.1"], ["Date", "17 October 2026"],
+        ["Applies to", "dxps source of the same date, including the DxPS console; PostgreSQL 18, Apache Kafka 4.3.1, Go 1.26.6"],
         ["Examples", "Real records read with dxpsctl trace from the local run of 06 October 2026"],
     ], widths=[1.6, 5.5])
     page_break(doc)
@@ -547,7 +570,8 @@ def to_docx():
         elif k == "code":
             code(doc, b[2], size=7.5)
         elif k == "img":
-            doc.add_picture(str(DIAG / b[1]), width=Inches(b[3]))
+            img = OUT_MD.parent / b[1] if b[1].startswith("console/") else DIAG / b[1]
+            doc.add_picture(str(img), width=Inches(b[3]))
             doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
             para(doc, "Figure: " + b[2], italic=True, size=8.5, color=GREY, align=WD_ALIGN_PARAGRAPH.CENTER)
         elif k == "table":

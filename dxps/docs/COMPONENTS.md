@@ -19,6 +19,7 @@ This guide explains what each DxPS component is responsible for, how it is used 
 | Catalog | YAML + CEL | Service recipes: tasks, dependencies, conditions, compensations, payload templates; per-tenant overrides | internal/catalog/data |
 | Network simulators | Go, HTTP/2 mTLS | Stand-ins for NRF, UDR, IMS, RESTCONF/USP, SM-DP+, OCS, NPDB, NEF; fault injection | internal/netsim |
 | Mosaic dashboard | Go + HTML/JS | Live operations view and load generator | internal/dashboard |
+| DxPS console | Go API + Next.js 16 UI | Signed-in operations and configuration console: orders, DLQ, simulators, catalog drafts, Template Lab, tenants, NE inventory, reports, users | cmd/console, internal/console, console/ |
 | dxpsctl | Go CLI | Secrets, PKI, migrations, seed, topics, tokens, DLQ re-drive, API calls, trace, test report | cmd/dxpsctl |
 
 ## 2. One order through every component
@@ -464,7 +465,26 @@ netsim implements every southbound interface with payload validation and per-ten
 
 Reads statistics from every service's loopback stats port, Kafka (topic end offsets, group lag) and PostgreSQL (as dxps_ops: orders by state, tasks by domain, NE latency percentiles, outbox backlog), and shows them as live tiles. It also contains a load generator and security probes.
 
-### 5.8 PKI, secrets and dxpsctl
+### 5.8 DxPS console
+
+The console is the signed-in tool for operating and configuring DxPS across all tenants. It has two parts: the console API (Go, https://localhost:8446, loopback only) and the web UI (Next.js, https://localhost:8092). The UI server forwards every call to the API; the session token travels in an HttpOnly, SameSite=Strict cookie that page scripts cannot read, and every change must carry a CSRF header. Users have one or more of four roles: viewer, operator (orders, faults, DLQ redrive, load runs), configurator (tenants, NE inventory, catalog drafts, Template Lab) and admin (users).
+
+| Data | Where | How the console uses it |
+|---|---|---|
+| Orders, tasks, attempts, NE inventory, audit | PostgreSQL, as dxps_ops | Reads across all tenants: lists, order detail with the task graph and the NE request and response of every attempt, reports |
+| tenant, network_element, tenant_ne_access | PostgreSQL, as dxps_ops | Updates tenant SLA tier, weight, quota and status, NE limits, and entitlements; each change writes an audit_event row with actor console:<user> and the before and after values |
+| Topics and consumer groups | Kafka | End offsets and group lag; dead letters are read from dxps.dlq and redriven to their original topic |
+| Service statistics | Stats ports 9201-9203, Mosaic 8088, netsim admin 9199 | Health, live rates, simulator latency and fault settings |
+| New orders | Gateway 8443 | Submitted and cancelled through the TMF641 API with a 2-minute tenant token limited to order read and write |
+| Console users, drafts, console audit | ~/dxps-runtime/console/ | users.json (PBKDF2-SHA256 hashes, mode 0600), drafts/ and audit.jsonl |
+
+Catalog changes use drafts because the services run with the catalog compiled in. A draft holds changed or new spec files. Validate loads the whole catalog with the change and runs the example of every spec through the Template Lab. The Lab runs the real planner and adapter renderers without calling any NE and shows the task graph, the CEL decisions and the exact NE requests. Export produces the files to copy into internal/catalog/data before a rebuild.
+
+![Console: order detail with the task graph and NE exchange](console/order-detail.png)
+
+![Console: Template Lab dry run](console/template-lab.png)
+
+### 5.9 PKI, secrets and dxpsctl
 
 - dxpsctl secrets generates database passwords, the JWT key and the secret-box key into secrets.env (mode 0600) in the runtime directory.
 - dxpsctl certs creates the development CA and ECDSA P-256 certificates for PostgreSQL, the gateway, the services and every simulator.
